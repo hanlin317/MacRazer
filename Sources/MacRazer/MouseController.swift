@@ -1485,6 +1485,37 @@ final class MouseController: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Prototype: the Viper Ultimate's right pair (0x06/0x07) cannot emit mouse buttons, so
+    /// the only way to give it a function is to write a keyboard block into the mouse. Off
+    /// unless the model is one whose USB table this app already writes.
+    var supportsOnboardKeyPrototype: Bool {
+        connected && !deviceIsBluetooth && deviceID.map(RazerDevices.resetsOnboardSideButtonsOverUSB(pid:)) == true
+    }
+
+    /// Writes one keyboard function to `entry` and reads it back. Prototype only: no backup,
+    /// and it trusts the caller's mods/usage.
+    func writeOnboardKey(entry: UInt8, mods: UInt8, usage: UInt8, name: String) {
+        userCommand { [weak self] in
+            guard let self else { return }
+            do {
+                let transport = try self.ensureDevice()
+                let block: [UInt8] = [0x02, 0x02, mods, usage, 0, 0, 0]
+                let reply = try transport.sendWithRetry(RazerCommands.setButtonFunction(id: entry, block: block))
+                guard reply.status == 0x02 else { throw HIDDevice.HIDError.commandFailed }
+                let check = try transport.sendWithRetry(RazerCommands.getButtonFunction(id: entry))
+                guard check.arguments[1] == entry, Array(check.arguments[3..<10]) == block else {
+                    throw SideButtonReset.ResetError.notReadBack
+                }
+                self.publish {
+                    self.sideButtonResetError = nil
+                    self.sideButtonResetDone = "\(SideButtonReset.name(entry)) now sends \(name)."
+                }
+            } catch {
+                self.publish { self.sideButtonResetError = SideButtonReset.failureText(error) }
+            }
+        }
+    }
+
     /// Writes each remapped side button's factory block back: over Bluetooth to every profile
     /// slot that holds it (`BluetoothDevice.resetButtonFunction`), over USB to the active
     /// profile (`SideButtonReset.reset`). Each button leaves the list as soon as its write is

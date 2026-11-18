@@ -43,6 +43,7 @@ struct RemapView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     VStack(alignment: .leading, spacing: 14) {
                         buttonList
+                        onboardKeysSection
                         dpiAndModelNotes
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -50,6 +51,7 @@ struct RemapView: View {
             } else {
                 notices
                 buttonList
+                onboardKeysSection
                 dpiAndModelNotes
                 footer
             }
@@ -95,6 +97,66 @@ struct RemapView: View {
         let pronoun = apps.count == 1 ? "it" : "them"
         return "If a side button doesn't show up here when you press it, \(list) may be taking "
             + "its clicks. Quit \(pronoun) and try again."
+    }
+
+    // MARK: - Onboard keys (prototype)
+
+    private struct OnboardEntry: Identifiable {
+        let id: UInt8
+        let name: String
+    }
+
+    private struct OnboardPreset: Identifiable {
+        let id: String
+        let name: String
+        let mods: UInt8
+        let usage: UInt8
+    }
+
+    private var onboardEntries: [OnboardEntry] {
+        [OnboardEntry(id: 0x07, name: "Right front"), OnboardEntry(id: 0x06, name: "Right rear")]
+    }
+
+    private var onboardPresets: [OnboardPreset] {
+        [
+            .init(id: "fill", name: "Fill window  ⌃⌥↑", mods: 5, usage: 0x52),
+            .init(id: "left", name: "Left half  ⌃⌥←", mods: 5, usage: 0x50),
+            .init(id: "right", name: "Right half  ⌃⌥→", mods: 5, usage: 0x4F),
+            .init(id: "mission", name: "Mission Control  ⌃↑", mods: 1, usage: 0x52),
+            .init(id: "copy", name: "Copy  ⌘C", mods: 8, usage: 0x06),
+            .init(id: "paste", name: "Paste  ⌘V", mods: 8, usage: 0x19),
+            .init(id: "spaceLeft", name: "Space Left  ⌃←", mods: 1, usage: 0x50),
+            .init(id: "spaceRight", name: "Space Right  ⌃→", mods: 1, usage: 0x4F),
+        ]
+    }
+
+    @ViewBuilder private var onboardKeysSection: some View {
+        if let controller, controller.supportsOnboardKeyPrototype {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Onboard keys — prototype").font(.system(size: 12, weight: .semibold))
+                Text("The right-side pair can't send mouse buttons, so MacRazer writes a key into the mouse instead. It works without this app running.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(onboardEntries) { entry in
+                    HStack {
+                        Text(entry.name).font(.system(size: 12))
+                        Spacer()
+                        Menu("Set…") {
+                            ForEach(onboardPresets) { preset in
+                                Button(preset.name) {
+                                    controller.writeOnboardKey(entry: entry.id, mods: preset.mods,
+                                                               usage: preset.usage, name: preset.name)
+                                }
+                            }
+                        }
+                        .frame(width: 120)
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
+        }
     }
 
     /// The DPI button's binding and model notes.
